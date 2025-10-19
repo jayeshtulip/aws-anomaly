@@ -1,0 +1,11 @@
+# Minimal dependencies for emergency retraining workflow
+# No version pinning to let pip resolve automatically
+
+numpy
+pandas
+scikit-learn
+xgboost
+catboost
+mlflow
+boto3
+requests

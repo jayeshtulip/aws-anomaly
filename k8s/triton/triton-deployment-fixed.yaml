@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triton-server
+  namespace: triton
+  labels:
+    app: triton-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: triton-server
+  template:
+    metadata:
+      labels:
+        app: triton-server
+    spec:
+      serviceAccountName: triton-sa
+      containers:
+      - name: triton
+        image: nvcr.io/nvidia/tritonserver:23.10-py3
+        command:
+        - tritonserver
+        args:
+        - --model-repository=s3://triton-models-71544/models
+        - --log-verbose=1
+        - --http-port=8000
+        - --grpc-port=8001
+        - --metrics-port=8002
+        - --exit-on-error=false
+        ports:
+        - containerPort: 8000
+          name: http
+        - containerPort: 8001
+          name: grpc
+        - containerPort: 8002
+          name: metrics
+        env:
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        - name: AWS_EC2_METADATA_DISABLED
+          value: "false"
+        - name: AWS_SDK_LOAD_CONFIG
+          value: "true"
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /v2/health/live
+            port: 8000
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 5
+        readinessProbe:
+          httpGet:
+            path: /v2/health/ready
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-service
+  namespace: triton
+  labels:
+    app: triton-server
+spec:
+  type: LoadBalancer
+  selector:
+    app: triton-server
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  - port: 8001
+    targetPort: 8001
+    protocol: TCP
+    name: grpc
+  - port: 8002
+    targetPort: 8002
+    protocol: TCP
+    name: metrics

@@ -1,0 +1,374 @@
+schema: '2.0'
+stages:
+  data_preprocessing:
+    cmd: python data_preprocessing/preprocess.py
+    deps:
+    - path: data/raw/cloudwatch_logs.csv
+      hash: md5
+      md5: bc8d404ae32f29d38edeb1672016e89f
+      size: 334206
+    - path: data_preprocessing/preprocess.py
+      hash: md5
+      md5: e2a4a9bbc8b6cd163aea29c5eac9799a
+      size: 4357
+    params:
+      params.yaml:
+        data_preprocessing:
+          raw_data_path: data/raw/cloudwatch_logs.csv
+          processed_data_path: data/processed/features.csv
+          test_size: 0.2
+          random_state: 42
+          anomaly_threshold:
+            error_rate: 0.1
+            memory_percentile: 0.95
+            duration_percentile: 0.95
+    outs:
+    - path: data/processed/features.csv
+      hash: md5
+      md5: 88b153460c0d9c983c11a4f0dacb2283
+      size: 591335
+  isolation_forest_training:
+    cmd: python models/isolation_forest/train.py
+    deps:
+    - path: data/processed/features.csv
+      hash: md5
+      md5: 88b153460c0d9c983c11a4f0dacb2283
+      size: 591335
+    - path: models/isolation_forest/train.py
+      hash: md5
+      md5: ec621e4e8e4924c6322533fa3f31f354
+      size: 8934
+    params:
+      params.yaml:
+        data_preprocessing.random_state: 42
+        data_preprocessing.test_size: 0.2
+        isolation_forest:
+          n_estimators: 100
+          contamination: 0.1
+          max_samples: auto
+          random_state: 42
+          n_jobs: -1
+          bootstrap: false
+          max_features: 1.0
+    outs:
+    - path: metrics/isolation_forest_metrics.json
+      hash: md5
+      md5: adb2d9c3d4a8770271ad5aa52a5935c1
+      size: 169
+    - path: models/isolation_forest/feature_names.txt
+      hash: md5
+      md5: c80482d318fcbf9cf206c7483bb28ab5
+      size: 508
+    - path: models/isolation_forest/model.pkl
+      hash: md5
+      md5: 9a78c425c0cccc93a23f03a6e92db04a
+      size: 884291
+    - path: models/isolation_forest/scaler.pkl
+      hash: md5
+      md5: d67be73dcd9fbca87fb60cfcce756414
+      size: 2247
+    - path: plots/isolation_forest_confusion_matrix.png
+      hash: md5
+      md5: c593c77bc05d8a15f33206aaac717740
+      size: 55041
+    - path: plots/isolation_forest_roc_curve.png
+      hash: md5
+      md5: 81349e5d6534c58ea3c5b9b4d82f4b99
+      size: 128192
+  xgboost_training:
+    cmd: python models/xgboost/train.py
+    deps:
+    - path: data/processed/features.csv
+      hash: md5
+      md5: 88b153460c0d9c983c11a4f0dacb2283
+      size: 591335
+    - path: models/xgboost/train.py
+      hash: md5
+      md5: 6479a30114451798bfeebcf7d6be3d50
+      size: 9817
+    params:
+      params.yaml:
+        data_preprocessing.random_state: 42
+        data_preprocessing.test_size: 0.2
+        xgboost:
+          objective: binary:logistic
+          max_depth: 6
+          learning_rate: 0.1
+          n_estimators: 500
+          subsample: 0.8
+          colsample_bytree: 0.8
+          gamma: 0
+          min_child_weight: 1
+          reg_alpha: 0
+          reg_lambda: 1
+          random_state: 42
+          eval_metric: auc
+          scale_pos_weight: 1
+          tree_method: auto
+    outs:
+    - path: metrics/xgboost_metrics.json
+      hash: md5
+      md5: c7afecb0452875ba234dfee1478b30a3
+      size: 159
+    - path: models/xgboost/feature_names.txt
+      hash: md5
+      md5: c80482d318fcbf9cf206c7483bb28ab5
+      size: 508
+    - path: models/xgboost/model.pkl
+      hash: md5
+      md5: e8169ed925d79bdee1bbf4e667c53f94
+      size: 383142
+    - path: models/xgboost/scaler.pkl
+      hash: md5
+      md5: 15ffcd48ace0b19ce98a26f7a23acad1
+      size: 2247
+    - path: plots/xgboost_confusion_matrix.png
+      hash: md5
+      md5: 6a9a30dd39d4df47a02648c2f39945e9
+      size: 52944
+    - path: plots/xgboost_feature_importance.png
+      hash: md5
+      md5: a587fb29ace44ac823d719d4b11cd6a6
+      size: 174339
+    - path: plots/xgboost_roc_curve.png
+      hash: md5
+      md5: 99f9c17cb365057b167abae55fb8d098
+      size: 125544
+  catboost_training:
+    cmd: python models/catboost/train.py
+    deps:
+    - path: data/processed/features.csv
+      hash: md5
+      md5: 88b153460c0d9c983c11a4f0dacb2283
+      size: 591335
+    - path: models/catboost/train.py
+      hash: md5
+      md5: 38246220d0560adae61b597ce5f19221
+      size: 9621
+    params:
+      params.yaml:
+        catboost:
+          iterations: 1000
+          learning_rate: 0.05
+          depth: 6
+          l2_leaf_reg: 3
+          loss_function: Logloss
+          random_seed: 42
+          verbose: 100
+          eval_metric: AUC
+          early_stopping_rounds: 50
+          task_type: CPU
+        data_preprocessing.random_state: 42
+        data_preprocessing.test_size: 0.2
+    outs:
+    - path: metrics/catboost_metrics.json
+      hash: md5
+      md5: 8729fd464fd168df743cdadc3b839337
+      size: 159
+    - path: models/catboost/feature_names.txt
+      hash: md5
+      md5: c80482d318fcbf9cf206c7483bb28ab5
+      size: 508
+    - path: models/catboost/model.cbm
+      hash: md5
+      md5: 1072a2cb414e2cbe98659cb44e185d56
+      size: 15016
+    - path: models/catboost/model.pkl
+      hash: md5
+      md5: e654676a288523b5d55687d41f57046a
+      size: 19342
+    - path: models/catboost/scaler.pkl
+      hash: md5
+      md5: 15ffcd48ace0b19ce98a26f7a23acad1
+      size: 2247
+    - path: plots/catboost_confusion_matrix.png
+      hash: md5
+      md5: 1cbdee27e899c764ec04a5b0005c61ed
+      size: 53445
+    - path: plots/catboost_feature_importance.png
+      hash: md5
+      md5: bb6945d4f5c2dc8f5c09fe12fd547b1b
+      size: 177745
+    - path: plots/catboost_roc_curve.png
+      hash: md5
+      md5: eb9fd9fedecc39b1b014e1568d39d72d
+      size: 125086
+  hyperparameter_optimization:
+    cmd: python ab_testing/hyperparameter_search.py
+    deps:
+    - path: ab_testing/hyperparameter_search.py
+      hash: md5
+      md5: d1ee31299a8b6ff0fcf6623a34f0d7cf
+      size: 15035
+    - path: data/processed/features.csv
+      hash: md5
+      md5: 88b153460c0d9c983c11a4f0dacb2283
+      size: 591335
+    params:
+      params.yaml:
+        data_preprocessing.random_state: 42
+        hyperparameter_optimization:
+          study_name: xgboost_anomaly_optimization
+          n_trials: 30
+          n_cv_folds: 3
+          metric: f1
+          direction: maximize
+          timeout: 3600
+    outs:
+    - path: ab_testing/optimization_results/best_trial.json
+      hash: md5
+      md5: 062c4701f5c81f363d5f830ba974174f
+      size: 728
+    - path: ab_testing/optimization_results/optimization_summary.json
+      hash: md5
+      md5: 3e2291e83d1dcc0be46421f32dcb404b
+      size: 6667
+    - path: ab_testing/optimization_results/xgb_optimized_v1/model.pkl
+      hash: md5
+      md5: 6e68923d8185a89fe44ceda64b0ec318
+      size: 474863
+    - path: ab_testing/optimization_results/xgb_optimized_v1/params.json
+      hash: md5
+      md5: 5ab2f0e6e14ae029a466cb7d110c962d
+      size: 413
+    - path: ab_testing/optimization_results/xgb_optimized_v1/scaler.pkl
+      hash: md5
+      md5: 8557423846667e68ff5d9ebdef71245d
+      size: 2247
+    - path: ab_testing/optimization_results/xgb_optimized_v2/model.pkl
+      hash: md5
+      md5: 6e68923d8185a89fe44ceda64b0ec318
+      size: 474863
+    - path: ab_testing/optimization_results/xgb_optimized_v2/params.json
+      hash: md5
+      md5: 5ab2f0e6e14ae029a466cb7d110c962d
+      size: 413
+    - path: ab_testing/optimization_results/xgb_optimized_v2/scaler.pkl
+      hash: md5
+      md5: 8557423846667e68ff5d9ebdef71245d
+      size: 2247
+    - path: ab_testing/optimization_results/xgb_optimized_v3/model.pkl
+      hash: md5
+      md5: 6e68923d8185a89fe44ceda64b0ec318
+      size: 474863
+    - path: ab_testing/optimization_results/xgb_optimized_v3/params.json
+      hash: md5
+      md5: 5ab2f0e6e14ae029a466cb7d110c962d
+      size: 413
+    - path: ab_testing/optimization_results/xgb_optimized_v3/scaler.pkl
+      hash: md5
+      md5: 8557423846667e68ff5d9ebdef71245d
+      size: 2247
+  model_evaluation:
+    cmd: python scripts/evaluate_models.py
+    deps:
+    - path: data/processed/features.csv
+      hash: md5
+      md5: 88b153460c0d9c983c11a4f0dacb2283
+      size: 591335
+    - path: models/catboost/model.pkl
+      hash: md5
+      md5: e654676a288523b5d55687d41f57046a
+      size: 19342
+    - path: models/isolation_forest/model.pkl
+      hash: md5
+      md5: 9a78c425c0cccc93a23f03a6e92db04a
+      size: 884291
+    - path: models/xgboost/model.pkl
+      hash: md5
+      md5: e8169ed925d79bdee1bbf4e667c53f94
+      size: 383142
+    - path: scripts/evaluate_models.py
+      hash: md5
+      md5: a7f469ae0045dbdf2ecd5b1137bc2429
+      size: 9761
+    params:
+      params.yaml:
+        data_preprocessing.random_state: 42
+        data_preprocessing.test_size: 0.2
+        evaluation:
+          metrics_output: metrics/
+          plots_output: plots/
+          confusion_matrix: true
+          roc_curve: true
+          precision_recall_curve: true
+          feature_importance: true
+          classification_report: true
+    outs:
+    - path: metrics/model_comparison.json
+      hash: md5
+      md5: 841910869ff3834b023bb2f65e1f537f
+      size: 619
+    - path: plots/model_comparison.png
+      hash: md5
+      md5: 18c590fd0dcc36f283e181721948bb4e
+      size: 173372
+    - path: plots/model_comparison_detailed.png
+      hash: md5
+      md5: 46a19d3ca9e86260d429b498e56113e7
+      size: 229575
+  ab_test_analysis:
+    cmd: python ab_testing/run_complete_analysis.py
+    deps:
+    - path: ab_testing/generate_analysis_report.py
+      hash: md5
+      md5: a24d39f53a5198f49ff3c63d8a11be5d
+      size: 9587
+    - path: ab_testing/generate_experiment_data.py
+      hash: md5
+      md5: 65e4814d01542ef433fc322fb954e7ff
+      size: 2619
+    - path: ab_testing/optimization_results/xgb_optimized_v1/model.pkl
+      hash: md5
+      md5: 6e68923d8185a89fe44ceda64b0ec318
+      size: 474863
+    - path: ab_testing/optimization_results/xgb_optimized_v2/model.pkl
+      hash: md5
+      md5: 6e68923d8185a89fe44ceda64b0ec318
+      size: 474863
+    - path: ab_testing/optimization_results/xgb_optimized_v3/model.pkl
+      hash: md5
+      md5: 6e68923d8185a89fe44ceda64b0ec318
+      size: 474863
+    - path: ab_testing/power_analysis.py
+      hash: md5
+      md5: eeb39351b879a51469d9bd84cd354f4a
+      size: 5191
+    - path: ab_testing/run_complete_analysis.py
+      hash: md5
+      md5: 562066eaf0322fb6f2fdb1c705e9e94a
+      size: 2545
+    params:
+      params.yaml:
+        ab_testing:
+          control_model: xgboost
+          variant_models:
+          - catboost
+          - xgb_optimized_v1
+          - xgb_optimized_v2
+          - xgb_optimized_v3
+          traffic_split:
+            control: 0.3
+            catboost: 0.25
+            xgb_v1: 0.2
+            xgb_v2: 0.15
+            xgb_v3: 0.1
+          min_sample_size: 1000
+          confidence_level: 0.95
+          alpha: 0.05
+          power: 0.8
+          min_effect_size: 0.02
+          experiment_duration_days: 7
+    outs:
+    - path: ab_testing/analysis_results/full_analysis_report.json
+      hash: md5
+      md5: f75cc23891f0101ed8871880c75824e2
+      size: 7499
+    - path: ab_testing/experiment_data.csv
+      hash: md5
+      md5: 7d55a082240a9880f136c82f8d7e3cca
+      size: 478327
+    - path: ab_testing/power_analysis/power_curve.png
+      hash: md5
+      md5: 0afc7e4d0a31bd7dbe0123965d52a24d
+      size: 263319

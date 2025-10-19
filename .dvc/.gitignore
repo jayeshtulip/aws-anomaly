@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+venv/
+env/
+ENV/
+
+# DVC - Model artifacts
+/models/**/*.pkl
+/models/**/*.cbm
+/models/**/*.txt
+/models/**/feature_names.txt
+
+# DVC - Data
+/data/raw/*.csv
+/data/processed/*.csv
+
+# DVC - Metrics and Plots
+/metrics/*.json
+/plots/*.png
+
+# DVC - A/B Testing
+/ab_testing/optimization_results/
+/ab_testing/experiment_data.csv
+/ab_testing/analysis_results/
+/ab_testing/power_analysis/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# MLflow
+mlruns/
+mlartifacts/
+mlflow.db
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# AWS
+.aws/
+/config.local
+/tmp
+/cache

@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-service
+  namespace: triton
+spec:
+  type: ClusterIP  # Change from LoadBalancer to ClusterIP
+  selector:
+    app: triton-server
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  - name: grpc
+    port: 8001
+    targetPort: 8001
+  - name: metrics
+    port: 8002
+    targetPort: 8002
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: triton-ingress
+  namespace: triton
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/healthcheck-path: /v2/health/live
+    alb.ingress.kubernetes.io/healthcheck-port: "8000"
+    alb.ingress.kubernetes.io/healthcheck-protocol: HTTP
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+    alb.ingress.kubernetes.io/success-codes: "200"
+    alb.ingress.kubernetes.io/tags: Environment=production,Application=triton-inference
+spec:
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: triton-service
+            port:
+              number: 8000

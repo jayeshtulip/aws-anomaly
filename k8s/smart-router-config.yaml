@@ -1,0 +1,84 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-ab-config
+  namespace: triton
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    http {
+        upstream xgboost {
+            server triton-service:8000;
+        }
+        
+        upstream catboost {
+            server triton-catboost-variant:8000;
+        }
+        
+        # Determine backend based on client IP
+        split_clients "${remote_addr}${request_id}" $backend_variant {
+            70%     xgboost;
+            30%     catboost;
+        }
+        
+        # Map backend to variant name for headers
+        map $backend_variant $variant_name {
+            xgboost  "xgboost-control";
+            catboost "catboost-variant";
+        }
+        
+        # Map backend to correct model name and upstream
+        map $backend_variant $model_name {
+            xgboost  "xgboost_anomaly";
+            catboost "catboost_anomaly";
+        }
+        
+        server {
+            listen 8080;
+            
+            # Health endpoint
+            location /health {
+                access_log off;
+                return 200 "OK\n";
+            }
+            
+            # Route to XGBoost model
+            location ~ ^/v2/models/xgboost_anomaly/(.*)$ {
+                proxy_pass http://xgboost/v2/models/xgboost_anomaly/$1$is_args$args;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                add_header X-Model-Variant "xgboost-control" always;
+                add_header X-AB-Test "active" always;
+            }
+            
+            # Route to CatBoost model
+            location ~ ^/v2/models/catboost_anomaly/(.*)$ {
+                proxy_pass http://catboost/v2/models/catboost_anomaly/$1$is_args$args;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                add_header X-Model-Variant "catboost-variant" always;
+                add_header X-AB-Test "active" always;
+            }
+            
+            # Generic inference endpoint with A/B routing
+            location ~ ^/v2/infer(.*)$ {
+                proxy_pass http://$backend_variant/v2/models/$model_name/infer$1$is_args$args;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                add_header X-Model-Variant $variant_name always;
+                add_header X-AB-Test "active" always;
+                add_header X-Routed-Model $model_name always;
+            }
+            
+            # Default - route based on A/B split to server info
+            location / {
+                proxy_pass http://$backend_variant;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                add_header X-Model-Variant $variant_name always;
+                add_header X-AB-Test "active" always;
+            }
+        }
+    }

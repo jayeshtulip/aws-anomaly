@@ -1,0 +1,264 @@
+---
+# XGBoost Control (Current Production)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triton-xgboost-control
+  namespace: triton
+  labels:
+    app: triton
+    variant: control
+    model: xgboost
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: triton
+      variant: control
+  template:
+    metadata:
+      labels:
+        app: triton
+        variant: control
+        model: xgboost
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+    spec:
+      initContainers:
+      - name: model-downloader
+        image: amazon/aws-cli:latest
+        command:
+        - sh
+        - -c
+        - |
+          aws s3 sync s3://triton-models-2403/models/xgboost_anomaly /models/
+        env:
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        volumeMounts:
+        - name: models
+          mountPath: /models
+      containers:
+      - name: triton
+        image: nvcr.io/nvidia/tritonserver:23.10-py3
+        command: ["tritonserver"]
+        args:
+        - --model-repository=/models
+        - --log-verbose=1
+        ports:
+        - containerPort: 8000
+          name: http
+        - containerPort: 8001
+          name: grpc
+        - containerPort: 8002
+          name: metrics
+        volumeMounts:
+        - name: models
+          mountPath: /models
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+      volumes:
+      - name: models
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-xgboost-control
+  namespace: triton
+  labels:
+    variant: control
+spec:
+  selector:
+    app: triton
+    variant: control
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+  - name: grpc
+    port: 8001
+    targetPort: 8001
+  - name: metrics
+    port: 8002
+    targetPort: 8002
+---
+# CatBoost Variant (Test)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triton-catboost-variant
+  namespace: triton
+  labels:
+    app: triton
+    variant: test-catboost
+    model: catboost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: triton
+      variant: test-catboost
+  template:
+    metadata:
+      labels:
+        app: triton
+        variant: test-catboost
+        model: catboost
+        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+    spec:
+      initContainers:
+      - name: model-downloader
+        image: amazon/aws-cli:latest
+        command:
+        - sh
+        - -c
+        - |
+          # Download CatBoost model
+          aws s3 cp s3://triton-models-71544/models/anomaly_detector/1/model.pkl /models/catboost_anomaly/1/model.pkl
+          aws s3 cp s3://triton-models-71544/models/anomaly_detector/1/scaler.pkl /models/catboost_anomaly/1/scaler.pkl
+          aws s3 cp s3://triton-models-71544/models/anomaly_detector/config.pbtxt /models/catboost_anomaly/config.pbtxt
+        env:
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        volumeMounts:
+        - name: models
+          mountPath: /models
+      containers:
+      - name: triton
+        image: nvcr.io/nvidia/tritonserver:23.10-py3
+        command: ["tritonserver"]
+        args:
+        - --model-repository=/models
+        - --log-verbose=1
+        ports:
+        - containerPort: 8000
+        - containerPort: 8001
+        - containerPort: 8002
+        volumeMounts:
+        - name: models
+          mountPath: /models
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+      volumes:
+      - name: models
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-catboost-variant
+  namespace: triton
+  labels:
+    variant: test-catboost
+spec:
+  selector:
+    app: triton
+    variant: test-catboost
+  ports:
+  - name: http
+    port: 8000
+  - name: grpc
+    port: 8001
+  - name: metrics
+    port: 8002
+---
+# XGBoost Optimized Variant
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triton-xgboost-optimized
+  namespace: triton
+  labels:
+    app: triton
+    variant: test-optimized
+    model: xgboost-optimized
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: triton
+      variant: test-optimized
+  template:
+    metadata:
+      labels:
+        app: triton
+        variant: test-optimized
+        model: xgboost-optimized
+        version: v2
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8002"
+    spec:
+      initContainers:
+      - name: model-downloader
+        image: amazon/aws-cli:latest
+        command:
+        - sh
+        - -c
+        - |
+          aws s3 sync s3://triton-models-71544/ab_testing/optimization_results/xgb_optimized_v1 /models/xgboost_optimized/1/
+        env:
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        volumeMounts:
+        - name: models
+          mountPath: /models
+      containers:
+      - name: triton
+        image: nvcr.io/nvidia/tritonserver:23.10-py3
+        command: ["tritonserver"]
+        args:
+        - --model-repository=/models
+        - --log-verbose=1
+        ports:
+        - containerPort: 8000
+        - containerPort: 8001
+        - containerPort: 8002
+        volumeMounts:
+        - name: models
+          mountPath: /models
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+      volumes:
+      - name: models
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-xgboost-optimized
+  namespace: triton
+  labels:
+    variant: test-optimized
+spec:
+  selector:
+    app: triton
+    variant: test-optimized
+  ports:
+  - name: http
+    port: 8000
+  - name: grpc
+    port: 8001
+  - name: metrics
+    port: 8002

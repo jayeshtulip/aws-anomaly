@@ -1,0 +1,47 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-ab-config
+  namespace: triton
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    http {
+        upstream xgboost {
+            server triton-service:8000;
+        }
+        
+        upstream catboost {
+            server triton-catboost-variant:8000;
+        }
+        
+        split_clients "${remote_addr}${request_id}" $backend_variant {
+            70%     xgboost;
+            30%     catboost;
+        }
+        
+        map $backend_variant $variant_name {
+            xgboost  "xgboost-control";
+            catboost "catboost-variant";
+        }
+        
+        server {
+            listen 8080;
+            
+            location / {
+                proxy_pass http://$backend_variant;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                
+                add_header X-Model-Variant $variant_name always;
+                add_header X-AB-Test "active" always;
+            }
+            
+            location /health {
+                access_log off;
+                return 200 "OK\n";
+            }
+        }
+    }

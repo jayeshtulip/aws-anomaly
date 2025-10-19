@@ -1,0 +1,521 @@
+name: ML Training and Deployment Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Run every Sunday at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      retrain_reason:
+        description: 'Reason for manual retrain'
+        required: false
+        default: 'Manual trigger'
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: anomaly-detection
+  EKS_CLUSTER_NAME: triton-inference-cluster
+  PYTHON_VERSION: '3.10'
+
+jobs:
+  # ============================================================================
+  # JOB 1: CODE QUALITY & LINTING
+  # ============================================================================
+  code-quality:
+    name: Code Quality Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install black flake8 mypy pytest-cov
+          pip install -r requirements.txt
+      
+      - name: Run Black (formatting check)
+        run: black --check --diff .
+      
+      - name: Run Flake8 (linting)
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+      
+      - name: Run MyPy (type checking)
+        run: mypy training/ inference/ llm/ --ignore-missing-imports
+        continue-on-error: true
+
+  # ============================================================================
+  # JOB 2: ML TRAINING TESTS
+  # ============================================================================
+  ml-training-tests:
+    name: ML Training Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: code-quality
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-xdist pytest-cov
+      
+      - name: Run training tests (parallel)
+        run: |
+          pytest tests/test_training.py -v -n 4 --tb=short --cov=training --cov-report=xml
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: training
+          name: training-coverage
+
+  # ============================================================================
+  # JOB 3: INFERENCE TESTS
+  # ============================================================================
+  inference-tests:
+    name: Inference Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: code-quality
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest pytest-timeout
+      
+      - name: Start mock Triton server
+        run: |
+          # Mock Triton for testing
+          python -m pytest tests/test_inference.py -v --tb=short
+        env:
+          TRITON_URL: http://localhost:8000
+
+  # ============================================================================
+  # JOB 4: LLM RAG TESTS
+  # ============================================================================
+  llm-tests:
+    name: LLM RAG Pipeline Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: code-quality
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest
+      
+      - name: Run LLM tests
+        run: |
+          pytest tests/llm/ -v --tb=short
+        env:
+          VLLM_URL: http://localhost:8000
+          QDRANT_URL: http://localhost:6333
+
+  # ============================================================================
+  # JOB 5: PERFORMANCE & INTEGRATION TESTS
+  # ============================================================================
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [ml-training-tests, inference-tests]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pytest locust
+      
+      - name: Run performance tests
+        run: |
+          pytest tests/test_performance.py -v --tb=short
+
+  # ============================================================================
+  # JOB 6: BUILD DOCKER IMAGES
+  # ============================================================================
+  build-images:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [ml-training-tests, inference-tests, llm-tests, performance-tests]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    outputs:
+      training-image: ${{ steps.meta.outputs.training-tag }}
+      inference-image: ${{ steps.meta.outputs.inference-tag }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Generate image metadata
+        id: meta
+        run: |
+          SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
+          TIMESTAMP=$(date +%s)
+          echo "training-tag=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:training-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "inference-tag=${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:inference-${SHORT_SHA}" >> $GITHUB_OUTPUT
+      
+      - name: Build and push training image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile.training
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.training-tag }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:training-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Build and push inference image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          file: ./Dockerfile.inference
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.inference-tag }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:inference-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================================================
+  # JOB 7: TRAIN MODELS
+  # ============================================================================
+  train-models:
+    name: Train ML Models
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: build-images
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install mlflow boto3
+      
+      - name: Download training data from S3
+        run: |
+          aws s3 sync s3://anomaly-detection-data/processed/ ./data/processed/ --quiet
+          echo "Downloaded $(du -sh ./data/processed/ | cut -f1) of data"
+      
+      - name: Train Isolation Forest (pseudo-labels)
+        run: |
+          python training/train_isolation_forest.py \
+            --data-path ./data/processed/ \
+            --output-path ./models/isolation_forest/
+      
+      - name: Train XGBoost model
+        run: |
+          python training/train_xgboost.py \
+            --data-path ./data/processed/ \
+            --pseudo-labels ./models/isolation_forest/pseudo_labels.csv \
+            --output-path ./models/xgboost/ \
+            --mlflow-tracking-uri ${{ secrets.MLFLOW_TRACKING_URI }}
+        env:
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.MLFLOW_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.MLFLOW_PASSWORD }}
+      
+      - name: Train CatBoost model
+        run: |
+          python training/train_catboost.py \
+            --data-path ./data/processed/ \
+            --pseudo-labels ./models/isolation_forest/pseudo_labels.csv \
+            --output-path ./models/catboost/ \
+            --mlflow-tracking-uri ${{ secrets.MLFLOW_TRACKING_URI }}
+      
+      - name: Validate models
+        run: |
+          pytest tests/test_training.py::test_model_accuracy -v
+          pytest tests/test_training.py::test_overfitting -v
+      
+      - name: Upload models to S3
+        run: |
+          aws s3 sync ./models/ s3://anomaly-detection-models/trained/$(date +%Y%m%d)/ --quiet
+      
+      - name: Register models to MLflow
+        run: |
+          python training/register_models.py \
+            --model-paths ./models/ \
+            --mlflow-tracking-uri ${{ secrets.MLFLOW_TRACKING_URI }}
+
+  # ============================================================================
+  # JOB 8: DEPLOY TO STAGING
+  # ============================================================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [build-images, train-models]
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    environment:
+      name: staging
+      url: http://staging.anomaly-detection.internal
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+      
+      - name: Deploy to staging namespace
+        run: |
+          kubectl apply -f k8s/staging/ -n staging
+          kubectl set image deployment/triton-server \
+            triton=${{ needs.build-images.outputs.inference-image }} \
+            -n staging
+      
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/triton-server -n staging --timeout=10m
+      
+      - name: Run smoke tests
+        run: |
+          pytest tests/test_integration.py::test_end_to_end_pipeline -v
+        env:
+          TRITON_URL: http://staging-triton.internal:8000
+
+  # ============================================================================
+  # JOB 9: DEPLOY TO PRODUCTION (CANARY)
+  # ============================================================================
+  deploy-production:
+    name: Deploy to Production (Canary)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: deploy-staging
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: http://k8s-triton-xxx.elb.amazonaws.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER_NAME }} --region ${{ env.AWS_REGION }}
+      
+      - name: Update model repository in S3
+        run: |
+          aws s3 sync ./models/ s3://triton-model-repository/models/ --quiet
+      
+      - name: Canary Deployment - 10% traffic
+        run: |
+          kubectl patch ingress triton-ingress \
+            -n production \
+            --type merge \
+            -p '{"metadata":{"annotations":{"nginx.ingress.kubernetes.io/canary":"true","nginx.ingress.kubernetes.io/canary-weight":"10"}}}'
+          
+          echo "Deployed to 10% traffic, monitoring for 10 minutes..."
+          sleep 600
+      
+      - name: Check canary metrics
+        id: canary-check
+        run: |
+          # Query Prometheus for error rate and latency
+          ERROR_RATE=$(curl -s "http://prometheus.internal:9090/api/v1/query?query=rate(nv_inference_request_failure[5m])" | jq -r '.data.result[0].value[1]')
+          
+          if (( $(echo "$ERROR_RATE > 0.01" | bc -l) )); then
+            echo "Error rate too high: $ERROR_RATE"
+            exit 1
+          fi
+          
+          echo "Canary metrics OK"
+      
+      - name: Gradual rollout - 30% traffic
+        if: steps.canary-check.outcome == 'success'
+        run: |
+          kubectl patch ingress triton-ingress \
+            -n production \
+            --type merge \
+            -p '{"metadata":{"annotations":{"nginx.ingress.kubernetes.io/canary-weight":"30"}}}'
+          
+          echo "Increased to 30% traffic, monitoring for 10 minutes..."
+          sleep 600
+      
+      - name: Gradual rollout - 50% traffic
+        run: |
+          kubectl patch ingress triton-ingress \
+            -n production \
+            --type merge \
+            -p '{"metadata":{"annotations":{"nginx.ingress.kubernetes.io/canary-weight":"50"}}}'
+          
+          echo "Increased to 50% traffic, monitoring for 10 minutes..."
+          sleep 600
+      
+      - name: Full rollout - 100% traffic
+        run: |
+          kubectl set image deployment/triton-server \
+            triton=${{ needs.build-images.outputs.inference-image }} \
+            -n production
+          
+          kubectl rollout status deployment/triton-server -n production --timeout=15m
+          
+          # Remove canary annotations
+          kubectl patch ingress triton-ingress \
+            -n production \
+            --type json \
+            -p='[{"op": "remove", "path": "/metadata/annotations/nginx.ingress.kubernetes.io~1canary"}]'
+      
+      - name: Rollback on failure
+        if: failure()
+        run: |
+          echo "Deployment failed, rolling back..."
+          kubectl rollout undo deployment/triton-server -n production
+          kubectl patch ingress triton-ingress \
+            -n production \
+            --type json \
+            -p='[{"op": "remove", "path": "/metadata/annotations/nginx.ingress.kubernetes.io~1canary"}]'
+      
+      - name: Send deployment notification
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} \
+            -H 'Content-Type: application/json' \
+            -d "{\"text\":\"Production deployment $STATUS for commit ${{ github.sha }}\"}"
+
+  # ============================================================================
+  # JOB 10: LOAD TESTING (NIGHTLY)
+  # ============================================================================
+  load-testing:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: github.event_name == 'schedule'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      
+      - name: Install Locust
+        run: |
+          pip install locust
+      
+      - name: Run load test
+        run: |
+          locust -f tests/locustfile.py \
+            --headless \
+            --users 10 \
+            --spawn-rate 2 \
+            --run-time 5m \
+            --host http://k8s-triton-xxx.elb.amazonaws.com \
+            --html load_test_report.html
+      
+      - name: Upload load test report
+        uses: actions/upload-artifact@v3
+        with:
+          name: load-test-report
+          path: load_test_report.html
+      
+      - name: Check load test results
+        run: |
+          # Parse report and fail if error rate > 1%
+          python tests/check_load_test_results.py load_test_report.html

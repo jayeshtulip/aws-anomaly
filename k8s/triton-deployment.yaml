@@ -1,0 +1,130 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ml-inference
+---
+# SECRET SECTION REMOVED - created manually
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triton-anomaly-detector
+  namespace: ml-inference
+  labels:
+    app: triton-anomaly-detector
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: triton-anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: triton-anomaly-detector
+        version: v1
+    spec:
+      containers:
+      - name: triton
+        image: nvcr.io/nvidia/tritonserver:23.10-py3
+        command:
+        - tritonserver
+        args:
+        - --model-repository=s3://triton-models-71544/models
+        - --log-verbose=1
+        - --strict-model-config=false
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        - containerPort: 8001
+          name: grpc
+          protocol: TCP
+        - containerPort: 8002
+          name: metrics
+          protocol: TCP
+        env:
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: AWS_ACCESS_KEY_ID
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: aws-credentials
+              key: AWS_SECRET_ACCESS_KEY
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+        livenessProbe:
+          httpGet:
+            path: /v2/health/live
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+        readinessProbe:
+          httpGet:
+            path: /v2/health/ready
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 10
+          timeoutSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-anomaly-detector
+  namespace: ml-inference
+  labels:
+    app: triton-anomaly-detector
+spec:
+  type: LoadBalancer
+  selector:
+    app: triton-anomaly-detector
+  ports:
+  - name: http
+    port: 8000
+    targetPort: 8000
+    protocol: TCP
+  - name: grpc
+    port: 8001
+    targetPort: 8001
+    protocol: TCP
+  - name: metrics
+    port: 8002
+    targetPort: 8002
+    protocol: TCP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: triton-anomaly-detector-hpa
+  namespace: ml-inference
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: triton-anomaly-detector
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

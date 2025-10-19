@@ -1,0 +1,115 @@
+# Complete Parameters Configuration for DVC Pipeline
+
+# Data parameters
+data:
+  raw_data_path: "data/raw/cloudwatch_logs.csv"
+  processed_data_path: "data/processed/features.csv"
+  train_test_split: 0.7
+  validation_split: 0.15
+  test_split: 0.15
+
+# Data preprocessing
+data_preprocessing:
+  raw_data_path: data/raw/cloudwatch_logs.csv
+  processed_data_path: data/processed/features.csv
+  test_size: 0.2
+  random_state: 42
+  anomaly_threshold:
+    error_rate: 0.1
+    memory_percentile: 0.95
+    duration_percentile: 0.95
+
+# Isolation Forest parameters
+isolation_forest:
+  n_estimators: 100
+  contamination: 0.1
+  max_samples: auto
+  random_state: 42
+  n_jobs: -1
+  bootstrap: false
+  max_features: 1.0
+
+# XGBoost parameters
+xgboost:
+  objective: "binary:logistic"
+  max_depth: 6
+  learning_rate: 0.1
+  n_estimators: 500
+  subsample: 0.8
+  colsample_bytree: 0.8
+  gamma: 0
+  min_child_weight: 1
+  reg_alpha: 0
+  reg_lambda: 1
+  random_state: 42
+  eval_metric: "auc"
+  scale_pos_weight: 1
+  tree_method: "auto"
+
+# CatBoost parameters
+catboost:
+  iterations: 1000
+  learning_rate: 0.05
+  depth: 6
+  l2_leaf_reg: 3
+  loss_function: "Logloss"
+  random_seed: 42
+  verbose: 100
+  eval_metric: "AUC"
+  early_stopping_rounds: 50
+  task_type: "CPU"
+
+# Evaluation parameters
+evaluation:
+  metrics_output: metrics/
+  plots_output: plots/
+  confusion_matrix: true
+  roc_curve: true
+  precision_recall_curve: true
+  feature_importance: true
+  classification_report: true
+
+# MLflow parameters
+mlflow:
+  experiment_name: 'anomaly_detection_pipeline'
+  tracking_uri: 'http://localhost:5000'
+  run_name_prefix: 'dvc_pipeline'
+  artifact_location: 's3://triton-models-71544/mlflow-artifacts'
+
+# Hyperparameter Optimization
+hyperparameter_optimization:
+  study_name: 'xgboost_anomaly_optimization'
+  n_trials: 30
+  n_cv_folds: 3
+  metric: 'f1'
+  direction: 'maximize'
+  timeout: 3600  # 1 hour
+
+# A/B Testing parameters
+ab_testing:
+  control_model: "xgboost"
+  variant_models:
+    - "catboost"
+    - "xgb_optimized_v1"
+    - "xgb_optimized_v2"
+    - "xgb_optimized_v3"
+  traffic_split:
+    control: 0.30
+    catboost: 0.25
+    xgb_v1: 0.20
+    xgb_v2: 0.15
+    xgb_v3: 0.10
+  min_sample_size: 1000
+  confidence_level: 0.95
+  alpha: 0.05
+  power: 0.8
+  min_effect_size: 0.02
+  experiment_duration_days: 7
+
+# Model Registry
+model_registry:
+  s3_bucket: "triton-models-71544"
+  s3_prefix: "model-registry"
+  staging_path: "staging"
+  production_path: "production"
+  archive_path: "archive"

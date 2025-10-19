@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-metrics-exporter
+  namespace: triton
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-metrics-exporter
+  template:
+    metadata:
+      labels:
+        app: ml-metrics-exporter
+    spec:
+      containers:
+        - name: exporter
+          image: python:3.10-slim
+          command: ["python", "/app/metrics_exporter.py"]
+          ports:
+            - containerPort: 9100
+              name: metrics
+          volumeMounts:
+            - name: script
+              mountPath: /app
+          env:
+            - name: MLFLOW_TRACKING_URI
+              value: "http://mlflow:5000"
+      volumes:
+        - name: script
+          configMap:
+            name: metrics-exporter-script
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: metrics-exporter-script
+  namespace: triton
+data:
+  metrics_exporter.py: |
+    # Paste the metrics_exporter.py content here
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-metrics-exporter
+  namespace: triton
+spec:
+  selector:
+    app: ml-metrics-exporter
+  ports:
+    - port: 9100
+      targetPort: 9100
+  type: ClusterIP

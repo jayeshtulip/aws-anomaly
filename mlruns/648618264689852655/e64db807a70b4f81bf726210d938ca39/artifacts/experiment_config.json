@@ -1,0 +1,85 @@
+{
+  "name": "xgboost_optimized_comparison",
+  "description": "Compare top 3 optimized XGBoost variants",
+  "type": "hyperparameter",
+  "variants": [
+    {
+      "id": "xgb_optimized_v1",
+      "name": "Optimized Variant 1",
+      "params": {
+        "booster": "dart",
+        "lambda": 0.007177141927992002,
+        "alpha": 0.0006155564318973012,
+        "max_depth": 4,
+        "eta": 0.01699897838270077,
+        "gamma": 2.9152036385288193e-08,
+        "min_child_weight": 9,
+        "subsample": 0.8005575058716043,
+        "colsample_bytree": 0.8540362888980227,
+        "n_estimators": 100,
+        "sample_type": "uniform",
+        "normalize_type": "tree",
+        "rate_drop": 0.18340450985343382,
+        "skip_drop": 0.3042422429595377
+      },
+      "score": 1.0,
+      "std": 0.0,
+      "weight": 0.3333333333333333
+    },
+    {
+      "id": "xgb_optimized_v2",
+      "name": "Optimized Variant 2",
+      "params": {
+        "booster": "gbtree",
+        "lambda": 2.1371407316372935e-06,
+        "alpha": 0.000784915956255507,
+        "max_depth": 4,
+        "eta": 0.027010527749605478,
+        "gamma": 8.528933855762793e-06,
+        "min_child_weight": 5,
+        "subsample": 0.8925879806965068,
+        "colsample_bytree": 0.5998368910791798,
+        "n_estimators": 600
+      },
+      "score": 1.0,
+      "std": 0.0,
+      "weight": 0.3333333333333333
+    },
+    {
+      "id": "xgb_optimized_v3",
+      "name": "Optimized Variant 3",
+      "params": {
+        "booster": "gbtree",
+        "lambda": 0.0007250347382396634,
+        "alpha": 2.3130924416844053e-07,
+        "max_depth": 3,
+        "eta": 0.2521267904777921,
+        "gamma": 0.530953226900921,
+        "min_child_weight": 9,
+        "subsample": 0.6523068845866853,
+        "colsample_bytree": 0.5488360570031919,
+        "n_estimators": 700
+      },
+      "score": 1.0,
+      "std": 0.0,
+      "weight": 0.3333333333333333
+    }
+  ],
+  "metrics": [
+    {
+      "name": "f1_score",
+      "threshold": 0.9
+    },
+    {
+      "name": "auc_roc",
+      "threshold": 0.95
+    },
+    {
+      "name": "latency_p99",
+      "threshold": 100
+    }
+  ],
+  "duration_days": 7,
+  "min_samples": 1000,
+  "created_at": "2025-10-17T06:21:16.913020"
+}

@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/jayes/OneDrive/Desktop/jathakam/ai/k8s-deployent/aws-anomaly-detection/mlruns/494233800771245085/e4ff2d0efb754474902e33d5c71eb519/artifacts
+end_time: 1760616768455
+entry_point_name: ''
+experiment_id: '494233800771245085'
+lifecycle_stage: active
+run_id: e4ff2d0efb754474902e33d5c71eb519
+run_name: isolation_forest
+run_uuid: e4ff2d0efb754474902e33d5c71eb519
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1760616762963
+status: 3
+tags: []
+user_id: greeshma

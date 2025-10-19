@@ -1,0 +1,22 @@
+artifact_path: file:///C:/Users/jayes/OneDrive/Desktop/jathakam/ai/k8s-deployent/aws-anomaly-detection/mlruns/604722112101797430/models/m-22c1b289b2f04b3996b8afa1f8d4c736/artifacts
+flavors:
+  catboost:
+    catboost_version: 1.2.8
+    code: null
+    data: model.cb
+    model_type: CatBoostClassifier
+    save_format: cbm
+  python_function:
+    data: model.cb
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.catboost
+    python_version: 3.10.0
+mlflow_version: 3.2.0
+model_id: m-22c1b289b2f04b3996b8afa1f8d4c736
+model_size_bytes: 12440
+model_uuid: m-22c1b289b2f04b3996b8afa1f8d4c736
+prompts: null
+run_id: 24bbfb00580a4e189fe42c3e05ea5528
+utc_time_created: '2025-10-17 02:11:36.845235'

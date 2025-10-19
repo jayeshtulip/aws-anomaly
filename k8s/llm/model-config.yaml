@@ -1,0 +1,20 @@
+# Model Configuration
+models:
+  llama3-8b:
+    name: "meta-llama/Meta-Llama-3-8B-Instruct"
+    quantization: "awq"  # or "gptq", "bitsandbytes"
+    max_model_len: 4096
+    gpu_memory_utilization: 0.9
+    dtype: "auto"
+    
+  mistral-7b:
+    name: "mistralai/Mistral-7B-Instruct-v0.2"
+    quantization: "awq"
+    max_model_len: 8192
+    gpu_memory_utilization: 0.9
+    dtype: "auto"
+
+# Recommendation: Start with Llama 3 8B (4-bit quantized)
+# - Fits in g4dn.xlarge (16GB GPU RAM)
+# - Good balance of quality and speed
+# - ~4GB model size when quantized

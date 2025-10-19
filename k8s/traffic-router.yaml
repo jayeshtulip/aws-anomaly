@@ -1,0 +1,85 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-ab-config
+  namespace: triton
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    
+    http {
+        upstream xgboost_control {
+            server triton-xgboost-control:8000;
+        }
+        
+        upstream catboost_variant {
+            server triton-catboost-variant:8000;
+        }
+        
+        upstream xgboost_optimized {
+            server triton-xgboost-optimized:8000;
+        }
+        
+        split_clients "${remote_addr}${request_uri}" $backend {
+            70%     xgboost_control;
+            20%     catboost_variant;
+            10%     xgboost_optimized;
+        }
+        
+        server {
+            listen 8080;
+            
+            location / {
+                proxy_pass http://$backend;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Model-Variant $backend;
+                
+                # Add response headers to track which variant was used
+                add_header X-Model-Variant $backend always;
+            }
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ab-traffic-router
+  namespace: triton
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ab-router
+  template:
+    metadata:
+      labels:
+        app: ab-router
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: nginx-config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+      volumes:
+      - name: nginx-config
+        configMap:
+          name: nginx-ab-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ab-traffic-router
+  namespace: triton
+spec:
+  selector:
+    app: ab-router
+  ports:
+  - port: 80
+    targetPort: 8080

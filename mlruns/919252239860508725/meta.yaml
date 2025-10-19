@@ -1,0 +1,6 @@
+artifact_location: file:///C:/Users/jayes/OneDrive/Desktop/jathakam/ai/k8s-deployent/aws-anomaly-detection/mlruns/919252239860508725
+creation_time: 1760616768491
+experiment_id: '919252239860508725'
+last_update_time: 1760616768491
+lifecycle_stage: active
+name: xgboost-training

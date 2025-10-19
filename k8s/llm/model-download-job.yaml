@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: llm-models-pvc
+  namespace: triton
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi  # For multiple models
+  storageClassName: gp3
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: llm-model-downloader
+  namespace: triton
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: model-downloader
+        image: python:3.10-slim
+        command:
+        - bash
+        - -c
+        - |
+          pip install huggingface-hub
+          
+          # Set HuggingFace cache directory
+          export HF_HOME=/models/huggingface
+          mkdir -p $HF_HOME
+          
+          # Download Llama 3 8B (AWQ quantized)
+          echo "Downloading Llama 3 8B AWQ..."
+          python3 -c "
+          from huggingface_hub import snapshot_download
+          snapshot_download(
+              repo_id='casperhansen/llama-3-8b-instruct-awq',
+              local_dir='/models/llama3-8b-awq',
+              local_dir_use_symlinks=False
+          )
+          "
+          
+          echo "Model download complete!"
+          ls -lh /models/
+          
+        volumeMounts:
+        - name: models
+          mountPath: /models
+        env:
+        - name: HF_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: huggingface-token
+              key: token
+              optional: true
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: llm-models-pvc

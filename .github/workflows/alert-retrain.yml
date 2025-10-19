@@ -1,0 +1,66 @@
+name: Alert-Based Retrain
+
+on:
+  repository_dispatch:
+    types: [data-drift-alert, performance-drift-alert]
+
+jobs:
+  emergency-retrain:
+    name: Emergency Model Retrain
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Send PagerDuty alert
+        run: |
+          curl -X POST https://events.pagerduty.com/v2/enqueue \
+            -H 'Content-Type: application/json' \
+            -d '{
+              "routing_key": "${{ secrets.PAGERDUTY_KEY }}",
+              "event_action": "trigger",
+              "payload": {
+                "summary": "Model drift detected - emergency retrain triggered",
+                "severity": "warning",
+                "source": "GitHub Actions"
+              }
+            }'
+      
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Download last 14 days data
+        run: |
+          python scripts/download_recent_data.py --days 14 --output ./data/emergency/
+      
+      - name: Quick retrain
+        run: |
+          python training/emergency_retrain.py \
+            --data-path ./data/emergency/ \
+            --fast-mode \
+            --output-path ./models/emergency/
+      
+      - name: Validate emergency model
+        run: |
+          pytest tests/test_training.py::test_model_accuracy -v
+      
+      - name: Deploy with aggressive monitoring
+        run: |
+          python scripts/emergency_deploy.py \
+            --model-path ./models/emergency/ \
+            --canary-percent 5 \
+            --monitor-interval 60

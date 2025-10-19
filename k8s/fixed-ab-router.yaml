@@ -1,0 +1,90 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-ab-config
+  namespace: triton
+data:
+  nginx.conf: |
+    events {
+        worker_connections 1024;
+    }
+    http {
+        upstream triton {
+            server triton-service:8000;
+        }
+        server {
+            listen 8080;
+            
+            location / {
+                # Simple pass-through with tracking header
+                add_header X-Model-Variant "xgboost-control" always;
+                add_header X-AB-Test "enabled" always;
+                
+                proxy_pass http://triton;
+                proxy_set_header Host $host;
+                proxy_set_header X-Real-IP $remote_addr;
+                proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            }
+            
+            location /health {
+                access_log off;
+                return 200 "OK\n";
+                add_header Content-Type text/plain;
+            }
+        }
+    }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ab-traffic-router
+  namespace: triton
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ab-router
+  template:
+    metadata:
+      labels:
+        app: ab-router
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 8080
+          name: http
+        volumeMounts:
+        - name: config
+          mountPath: /etc/nginx/nginx.conf
+          subPath: nginx.conf
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: config
+        configMap:
+          name: nginx-ab-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ab-traffic-router
+  namespace: triton
+spec:
+  selector:
+    app: ab-router
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080

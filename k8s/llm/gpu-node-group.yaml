@@ -1,0 +1,70 @@
+apiVersion: eksctl.io/v1alpha5
+kind: ClusterConfig
+
+metadata:
+  name: triton-inference-cluster  # Your existing cluster name
+  region: us-east-1
+
+# Add GPU node group to existing cluster
+managedNodeGroups:
+  - name: gpu-inference-nodes
+    instanceType: g4dn.xlarge  # 1x NVIDIA T4 GPU, 16GB GPU RAM, 4 vCPUs, 16GB RAM
+    desiredCapacity: 1
+    minSize: 0
+    maxSize: 3
+    volumeSize: 100  # GB for model storage
+    
+    labels:
+      workload: llm-inference
+      gpu: "true"
+    
+    tags:
+      Name: llm-gpu-node
+      Environment: production
+      ManagedBy: eksctl
+    
+    iam:
+      withAddonPolicies:
+        autoScaler: true
+        ebs: true
+        efs: true
+        albIngress: true
+    
+    # Enable GPU support
+    preBootstrapCommands:
+      - "sudo yum install -y nvidia-driver-latest-dkms"
+    
+    # SSH access (optional)
+    ssh:
+      allow: false
+    
+    # Taints to ensure only GPU workloads run here
+    taints:
+      - key: nvidia.com/gpu
+        value: "true"
+        effect: NoSchedule
+
+# Alternative: Spot instances for cost savings (50-70% cheaper)
+  - name: gpu-spot-nodes
+    instanceTypes: 
+      - g4dn.xlarge
+      - g4dn.2xlarge  # 1x T4, 8 vCPUs, 32GB RAM
+    desiredCapacity: 0  # Start with 0, scale up when needed
+    minSize: 0
+    maxSize: 5
+    spot: true
+    volumeSize: 100
+    
+    labels:
+      workload: llm-inference
+      gpu: "true"
+      lifecycle: spot
+    
+    tags:
+      Name: llm-gpu-spot-node
+      Environment: production
+    
+    taints:
+      - key: nvidia.com/gpu
+        value: "true"
+        effect: NoSchedule

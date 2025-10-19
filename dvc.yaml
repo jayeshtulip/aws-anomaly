@@ -1,0 +1,171 @@
+# Complete DVC Pipeline Configuration
+
+stages:
+  data_preprocessing:
+    cmd: python data_preprocessing/preprocess.py
+    deps:
+      - data_preprocessing/preprocess.py
+      - data/raw/cloudwatch_logs.csv
+    params:
+      - data_preprocessing
+    outs:
+      - data/processed/features.csv:
+          cache: true
+          persist: true
+
+  isolation_forest_training:
+    cmd: python models/isolation_forest/train.py
+    deps:
+      - models/isolation_forest/train.py
+      - data/processed/features.csv
+    params:
+      - isolation_forest
+      - data_preprocessing.random_state
+      - data_preprocessing.test_size
+    outs:
+      - models/isolation_forest/model.pkl:
+          cache: true
+      - models/isolation_forest/scaler.pkl:
+          cache: true
+      - models/isolation_forest/feature_names.txt:
+          cache: true
+    metrics:
+      - metrics/isolation_forest_metrics.json:
+          cache: false
+    plots:
+      - plots/isolation_forest_confusion_matrix.png:
+          cache: false
+      - plots/isolation_forest_roc_curve.png:
+          cache: false
+
+  xgboost_training:
+    cmd: python models/xgboost/train.py
+    deps:
+      - models/xgboost/train.py
+      - data/processed/features.csv
+    params:
+      - xgboost
+      - data_preprocessing.random_state
+      - data_preprocessing.test_size
+    outs:
+      - models/xgboost/model.pkl:
+          cache: true
+      - models/xgboost/scaler.pkl:
+          cache: true
+      - models/xgboost/feature_names.txt:
+          cache: true
+    metrics:
+      - metrics/xgboost_metrics.json:
+          cache: false
+    plots:
+      - plots/xgboost_confusion_matrix.png:
+          cache: false
+      - plots/xgboost_roc_curve.png:
+          cache: false
+      - plots/xgboost_feature_importance.png:
+          cache: false
+
+  catboost_training:
+    cmd: python models/catboost/train.py
+    deps:
+      - models/catboost/train.py
+      - data/processed/features.csv
+    params:
+      - catboost
+      - data_preprocessing.random_state
+      - data_preprocessing.test_size
+    outs:
+      - models/catboost/model.pkl:
+          cache: true
+      - models/catboost/model.cbm:
+          cache: true
+      - models/catboost/scaler.pkl:
+          cache: true
+      - models/catboost/feature_names.txt:
+          cache: true
+    metrics:
+      - metrics/catboost_metrics.json:
+          cache: false
+    plots:
+      - plots/catboost_confusion_matrix.png:
+          cache: false
+      - plots/catboost_roc_curve.png:
+          cache: false
+      - plots/catboost_feature_importance.png:
+          cache: false
+
+  hyperparameter_optimization:
+    cmd: python ab_testing/hyperparameter_search.py
+    deps:
+      - ab_testing/hyperparameter_search.py
+      - data/processed/features.csv
+    params:
+      - hyperparameter_optimization
+      - data_preprocessing.random_state
+    outs:
+      - ab_testing/optimization_results/xgb_optimized_v1/model.pkl:
+          cache: true
+      - ab_testing/optimization_results/xgb_optimized_v1/scaler.pkl:
+          cache: true
+      - ab_testing/optimization_results/xgb_optimized_v1/params.json:
+          cache: true
+      - ab_testing/optimization_results/xgb_optimized_v2/model.pkl:
+          cache: true
+      - ab_testing/optimization_results/xgb_optimized_v2/scaler.pkl:
+          cache: true
+      - ab_testing/optimization_results/xgb_optimized_v2/params.json:
+          cache: true
+      - ab_testing/optimization_results/xgb_optimized_v3/model.pkl:
+          cache: true
+      - ab_testing/optimization_results/xgb_optimized_v3/scaler.pkl:
+          cache: true
+      - ab_testing/optimization_results/xgb_optimized_v3/params.json:
+          cache: true
+      - ab_testing/optimization_results/optimization_summary.json:
+          cache: true
+    metrics:
+      - ab_testing/optimization_results/best_trial.json:
+          cache: false
+
+  model_evaluation:
+    cmd: python scripts/evaluate_models.py
+    deps:
+      - scripts/evaluate_models.py
+      - models/isolation_forest/model.pkl
+      - models/xgboost/model.pkl
+      - models/catboost/model.pkl
+      - data/processed/features.csv
+    params:
+      - evaluation
+      - data_preprocessing.test_size
+      - data_preprocessing.random_state
+    metrics:
+      - metrics/model_comparison.json:
+          cache: false
+    plots:
+      - plots/model_comparison.png:
+          cache: false
+      - plots/model_comparison_detailed.png:
+          cache: false
+
+  ab_test_analysis:
+    cmd: python ab_testing/run_complete_analysis.py
+    deps:
+      - ab_testing/run_complete_analysis.py
+      - ab_testing/generate_experiment_data.py
+      - ab_testing/generate_analysis_report.py
+      - ab_testing/power_analysis.py
+      - ab_testing/optimization_results/xgb_optimized_v1/model.pkl
+      - ab_testing/optimization_results/xgb_optimized_v2/model.pkl
+      - ab_testing/optimization_results/xgb_optimized_v3/model.pkl
+    params:
+      - ab_testing
+    outs:
+      - ab_testing/experiment_data.csv:
+          cache: true
+    metrics:
+      - ab_testing/analysis_results/full_analysis_report.json:
+          cache: false
+    plots:
+      - ab_testing/power_analysis/power_curve.png:
+          cache: false

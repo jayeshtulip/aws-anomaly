@@ -1,0 +1,326 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      external_labels:
+        cluster: 'triton-inference-cluster'
+        environment: 'production'
+
+    # Alertmanager configuration
+    alerting:
+      alertmanagers:
+        - static_configs:
+            - targets:
+                - alertmanager:9093
+
+    # Load rules
+    rule_files:
+      - '/etc/prometheus/rules/*.yml'
+
+    # Scrape configurations
+    scrape_configs:
+      # Prometheus itself
+      - job_name: 'prometheus'
+        static_configs:
+          - targets: ['localhost:9090']
+
+      # Kubernetes API server
+      - job_name: 'kubernetes-apiservers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+            action: keep
+            regex: default;kubernetes;https
+
+      # Kubernetes nodes
+      - job_name: 'kubernetes-nodes'
+        kubernetes_sd_configs:
+          - role: node
+        scheme: https
+        tls_config:
+          ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        relabel_configs:
+          - action: labelmap
+            regex: __meta_kubernetes_node_label_(.+)
+
+      # Triton Inference Server
+      - job_name: 'triton-inference-server'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - triton
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: triton-server
+          - source_labels: [__meta_kubernetes_pod_ip]
+            action: replace
+            target_label: __address__
+            replacement: ${1}:8002  # Triton metrics port
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+
+      # vLLM Service
+      - job_name: 'vllm-service'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - triton
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: vllm
+          - source_labels: [__meta_kubernetes_pod_ip]
+            action: replace
+            target_label: __address__
+            replacement: ${1}:8000
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+
+      # Qdrant
+      - job_name: 'qdrant'
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - triton
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: qdrant
+          - source_labels: [__meta_kubernetes_pod_ip]
+            action: replace
+            target_label: __address__
+            replacement: ${1}:6333
+
+      # Node Exporter (system metrics)
+      - job_name: 'node-exporter'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            action: keep
+            regex: node-exporter
+
+      # Custom Application Metrics
+      - job_name: 'ml-metrics-exporter'
+        static_configs:
+          - targets: ['ml-metrics-exporter:9100']
+        metrics_path: /metrics
+
+  # Alert rules
+  alert_rules.yml: |
+    groups:
+      - name: model_performance
+        interval: 30s
+        rules:
+          - alert: ModelAccuracyDegraded
+            expr: model_accuracy < 0.85
+            for: 30m
+            labels:
+              severity: critical
+              team: ml-ops
+            annotations:
+              summary: "Model accuracy below threshold"
+              description: "Model accuracy is {{ $value }}, below 0.85 threshold"
+              runbook: "https://wiki.company.com/runbooks/model-degradation"
+
+          - alert: HighLatency
+            expr: histogram_quantile(0.95, rate(nv_inference_request_duration_us[5m])) > 1000000
+            for: 5m
+            labels:
+              severity: warning
+              team: ml-ops
+            annotations:
+              summary: "High inference latency detected"
+              description: "P95 latency is {{ $value }}us, exceeding 1000ms threshold"
+
+          - alert: HighErrorRate
+            expr: rate(nv_inference_request_failure[5m]) > 0.05
+            for: 10m
+            labels:
+              severity: critical
+              team: ml-ops
+            annotations:
+              summary: "High error rate detected"
+              description: "Error rate is {{ $value }}, exceeding 5% threshold"
+
+      - name: data_quality
+        interval: 1m
+        rules:
+          - alert: DataDriftDetected
+            expr: feature_drift_psi > 0.3
+            for: 1h
+            labels:
+              severity: warning
+              team: ml-ops
+            annotations:
+              summary: "Data drift detected"
+              description: "PSI score is {{ $value }}, exceeding 0.3 threshold"
+              action: "Trigger model retraining"
+
+          - alert: AnomalyRateSpike
+            expr: anomaly_rate > 0.10
+            for: 30m
+            labels:
+              severity: info
+              team: operations
+            annotations:
+              summary: "Anomaly rate spike detected"
+              description: "Anomaly rate is {{ $value }}, baseline is 0.05"
+
+      - name: infrastructure
+        interval: 30s
+        rules:
+          - alert: GPUMemoryHigh
+            expr: (nv_gpu_memory_used_bytes / (16 * 1024 * 1024 * 1024)) > 0.90
+            for: 15m
+            labels:
+              severity: warning
+              team: infrastructure
+            annotations:
+              summary: "GPU memory usage high"
+              description: "GPU memory at {{ $value }}%, consider scaling"
+
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+            for: 5m
+            labels:
+              severity: critical
+              team: infrastructure
+            annotations:
+              summary: "Pod is crash looping"
+              description: "Pod {{ $labels.pod }} is restarting frequently"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-data
+  namespace: monitoring
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: gp2
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:latest
+          args:
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/prometheus'
+            - '--storage.tsdb.retention.time=30d'
+            - '--web.enable-lifecycle'
+          ports:
+            - containerPort: 9090
+              name: web
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+            - name: data
+              mountPath: /prometheus
+            - name: rules
+              mountPath: /etc/prometheus/rules
+          resources:
+            requests:
+              cpu: 1000m
+              memory: 2Gi
+            limits:
+              cpu: 2000m
+              memory: 4Gi
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: prometheus-data
+        - name: rules
+          configMap:
+            name: prometheus-config
+            items:
+              - key: alert_rules.yml
+                path: alert_rules.yml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  namespace: monitoring
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - port: 9090
+      targetPort: 9090
+  type: ClusterIP
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+rules:
+  - apiGroups: [""]
+    resources:
+      - nodes
+      - nodes/proxy
+      - services
+      - endpoints
+      - pods
+    verbs: ["get", "list", "watch"]
+  - apiGroups:
+      - extensions
+    resources:
+      - ingresses
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  namespace: monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: monitoring

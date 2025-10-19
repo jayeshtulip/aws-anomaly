@@ -1,0 +1,6 @@
+artifact_location: file:///C:/Users/jayes/OneDrive/Desktop/jathakam/ai/k8s-deployent/aws-anomaly-detection/mlruns/897864361080297363
+creation_time: 1760660967155
+experiment_id: '897864361080297363'
+last_update_time: 1760660967155
+lifecycle_stage: active
+name: xgboost_anomaly_optimization

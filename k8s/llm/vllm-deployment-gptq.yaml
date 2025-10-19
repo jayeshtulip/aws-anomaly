@@ -1,0 +1,99 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vllm-service
+  namespace: triton
+spec:
+  selector:
+    app: vllm
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm
+  namespace: triton
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm
+  template:
+    metadata:
+      labels:
+        app: vllm
+    spec:
+      nodeSelector:
+        workload: llm-inference
+        gpu: "true"
+      
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+      
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:v0.5.4
+        command:
+        - python3
+        - -m
+        - vllm.entrypoints.openai.api_server
+        args:
+        - --model=/models/llama2-7b-gptq
+        - --quantization=gptq
+        - --gpu-memory-utilization=0.85
+        - --max-model-len=2048
+        - --host=0.0.0.0
+        - --port=8000
+        - --dtype=auto
+        
+        ports:
+        - containerPort: 8000
+          name: http
+        
+        resources:
+          requests:
+            nvidia.com/gpu: 1
+            memory: "8Gi"
+            cpu: "2"
+          limits:
+            nvidia.com/gpu: 1
+            memory: "12Gi"
+            cpu: "3"
+        
+        volumeMounts:
+        - name: models
+          mountPath: /models
+        - name: cache
+          mountPath: /root/.cache
+        
+        env:
+        - name: HF_HOME
+          value: /root/.cache/huggingface
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 600
+          periodSeconds: 30
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 600
+          periodSeconds: 10
+      
+      volumes:
+      - name: models
+        persistentVolumeClaim:
+          claimName: llm-models-pvc
+      - name: cache
+        emptyDir:
+          sizeLimit: 5Gi

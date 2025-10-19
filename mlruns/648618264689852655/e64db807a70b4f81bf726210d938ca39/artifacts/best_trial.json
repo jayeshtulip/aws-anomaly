@@ -1,0 +1,32 @@
+{
+  "number": 0,
+  "value": 1.0,
+  "params": {
+    "booster": "dart",
+    "lambda": 0.007177141927992002,
+    "alpha": 0.0006155564318973012,
+    "max_depth": 4,
+    "eta": 0.01699897838270077,
+    "gamma": 2.9152036385288193e-08,
+    "min_child_weight": 9,
+    "subsample": 0.8005575058716043,
+    "colsample_bytree": 0.8540362888980227,
+    "n_estimators": 100,
+    "sample_type": "uniform",
+    "normalize_type": "tree",
+    "rate_drop": 0.18340450985343382,
+    "skip_drop": 0.3042422429595377
+  },
+  "user_attrs": {
+    "mean_score": 1.0,
+    "std_score": 0.0,
+    "cv_scores": [
+      1.0,
+      1.0,
+      1.0
+    ]
+  },
+  "datetime_start": "2025-10-17T07:44:36.503148",
+  "datetime_complete": "2025-10-17T07:44:40.940082",
+  "duration": 4.436934
+}

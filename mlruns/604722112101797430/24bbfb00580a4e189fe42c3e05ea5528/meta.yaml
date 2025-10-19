@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/jayes/OneDrive/Desktop/jathakam/ai/k8s-deployent/aws-anomaly-detection/mlruns/604722112101797430/24bbfb00580a4e189fe42c3e05ea5528/artifacts
+end_time: 1760667101880
+entry_point_name: ''
+experiment_id: '604722112101797430'
+lifecycle_stage: active
+run_id: 24bbfb00580a4e189fe42c3e05ea5528
+run_name: dvc_pipeline_catboost
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1760667095590
+status: 3
+tags: []
+user_id: greeshma

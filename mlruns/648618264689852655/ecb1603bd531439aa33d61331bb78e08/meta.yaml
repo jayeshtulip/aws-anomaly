@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/Users/jayes/OneDrive/Desktop/jathakam/ai/k8s-deployent/aws-anomaly-detection/mlruns/648618264689852655/ecb1603bd531439aa33d61331bb78e08/artifacts
+end_time: 1760660849262
+entry_point_name: ''
+experiment_id: '648618264689852655'
+lifecycle_stage: active
+run_id: ecb1603bd531439aa33d61331bb78e08
+run_name: optuna_study_20251017_055728
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1760660849175
+status: 3
+tags: []
+user_id: greeshma

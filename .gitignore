@@ -1,0 +1,31 @@
+# Git backups
+.git_backup/
+
+# Virtual environments  
+venv/
+venv-llm/
+
+# Binary files
+*.dll
+*.so
+
+# Model artifacts
+models/catboost_onnx/
+models/catboost_onnx_fixed/
+models/catboost_python/
+models/catboost_triton/
+triton_models/
+
+# Data
+data/raw/
+data/processed/
+*.parquet
+ab_testing/analysis_results/
+ab_testing/optimization_results/
+
+# Temporary
+*.log
+test_output.txt
+mlflow.db
+catboost_info/
+.coverage

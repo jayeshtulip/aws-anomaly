@@ -1,0 +1,802 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  model-performance.json: |
+    {
+      "dashboard": {
+        "title": "ML Model Performance",
+        "tags": ["ml", "performance"],
+        "timezone": "browser",
+        "schemaVersion": 16,
+        "version": 0,
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Model Accuracy (Real-time)",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "model_accuracy",
+                "legendFormat": "{{model}}",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "percentunit", "min": 0, "max": 1},
+              {"format": "short"}
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "evaluator": {"type": "lt", "params": [0.85]},
+                  "operator": {"type": "and"},
+                  "query": {"params": ["A", "5m", "now"]},
+                  "reducer": {"type": "avg"},
+                  "type": "query"
+                }
+              ],
+              "executionErrorState": "alerting",
+              "frequency": "1m",
+              "handler": 1,
+              "name": "Model Accuracy Alert",
+              "noDataState": "no_data",
+              "notifications": []
+            }
+          },
+          {
+            "id": 2,
+            "title": "F1 Score Trend",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "model_f1_score",
+                "legendFormat": "{{model}} F1",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Inference Latency (P50, P95, P99)",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, rate(nv_inference_request_duration_us[5m]))",
+                "legendFormat": "P50",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(nv_inference_request_duration_us[5m]))",
+                "legendFormat": "P95",
+                "refId": "B"
+              },
+              {
+                "expr": "histogram_quantile(0.99, rate(nv_inference_request_duration_us[5m]))",
+                "legendFormat": "P99",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {"format": "µs", "label": "Latency"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Predictions Distribution",
+            "type": "piechart",
+            "gridPos": {"x": 0, "y": 16, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(model_predictions_total[5m])) by (model)",
+                "legendFormat": "{{model}}",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "title": "Error Rate",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 16, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "rate(nv_inference_request_failure[5m])",
+                "legendFormat": "Error Rate",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "percentunit"},
+              {"format": "short"}
+            ],
+            "thresholds": [
+              {
+                "value": 0.01,
+                "colorMode": "critical",
+                "op": "gt",
+                "fill": true,
+                "line": true
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Requests Per Second",
+            "type": "stat",
+            "gridPos": {"x": 0, "y": 24, "w": 6, "h": 4},
+            "targets": [
+              {
+                "expr": "sum(rate(nv_inference_request_success[1m]))",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "graphMode": "area",
+              "colorMode": "value",
+              "orientation": "auto",
+              "textMode": "auto"
+            }
+          },
+          {
+            "id": 7,
+            "title": "Total Predictions (24h)",
+            "type": "stat",
+            "gridPos": {"x": 6, "y": 24, "w": 6, "h": 4},
+            "targets": [
+              {
+                "expr": "sum(increase(model_predictions_total[24h]))",
+                "refId": "A"
+              }
+            ]
+          },
+          {
+            "id": 8,
+            "title": "Mean Latency",
+            "type": "stat",
+            "gridPos": {"x": 12, "y": 24, "w": 6, "h": 4},
+            "targets": [
+              {
+                "expr": "rate(nv_inference_request_duration_us[5m]) / rate(nv_inference_request_success[5m])",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "unit": "µs",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"value": 0, "color": "green"},
+                  {"value": 500000, "color": "yellow"},
+                  {"value": 1000000, "color": "red"}
+                ]
+              }
+            }
+          },
+          {
+            "id": 9,
+            "title": "Success Rate",
+            "type": "gauge",
+            "gridPos": {"x": 18, "y": 24, "w": 6, "h": 4},
+            "targets": [
+              {
+                "expr": "sum(rate(nv_inference_request_success[5m])) / (sum(rate(nv_inference_request_success[5m])) + sum(rate(nv_inference_request_failure[5m])))",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showThresholdLabels": false,
+              "showThresholdMarkers": true,
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"value": 0, "color": "red"},
+                  {"value": 0.95, "color": "yellow"},
+                  {"value": 0.99, "color": "green"}
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+
+  data-drift.json: |
+    {
+      "dashboard": {
+        "title": "Data Drift Detection",
+        "tags": ["ml", "drift", "data-quality"],
+        "timezone": "browser",
+        "refresh": "1m",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Feature Drift - PSI Scores",
+            "type": "bargauge",
+            "gridPos": {"x": 0, "y": 0, "w": 12, "h": 12},
+            "targets": [
+              {
+                "expr": "feature_drift_psi",
+                "legendFormat": "{{feature}}",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "orientation": "horizontal",
+              "displayMode": "gradient",
+              "showUnfilled": true,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"value": 0, "color": "green"},
+                  {"value": 0.1, "color": "yellow"},
+                  {"value": 0.3, "color": "red"}
+                ]
+              },
+              "min": 0,
+              "max": 0.5
+            }
+          },
+          {
+            "id": 2,
+            "title": "Drift Alert Status",
+            "type": "stat",
+            "gridPos": {"x": 12, "y": 0, "w": 12, "h": 4},
+            "targets": [
+              {
+                "expr": "count(feature_drift_psi > 0.3)",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "textMode": "value_and_name",
+              "colorMode": "background",
+              "graphMode": "none",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"value": 0, "color": "green"},
+                  {"value": 1, "color": "red"}
+                ]
+              }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "displayName": "Features with Drift"
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Anomaly Rate Over Time",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 4, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "anomaly_rate",
+                "legendFormat": "Anomaly Rate",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "percentunit"},
+              {"format": "short"}
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "evaluator": {"type": "gt", "params": [0.10]},
+                  "query": {"params": ["A", "30m", "now"]},
+                  "reducer": {"type": "avg"},
+                  "type": "query"
+                }
+              ],
+              "name": "Anomaly Rate Spike"
+            }
+          },
+          {
+            "id": 4,
+            "title": "Drift History (7 days)",
+            "type": "heatmap",
+            "gridPos": {"x": 0, "y": 12, "w": 24, "h": 8},
+            "targets": [
+              {
+                "expr": "feature_drift_psi",
+                "legendFormat": "{{feature}}",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "calculate": true,
+              "calculation": {
+                "xBuckets": {
+                  "mode": "size",
+                  "value": "1h"
+                },
+                "yBuckets": {
+                  "mode": "size",
+                  "value": "0.05"
+                }
+              },
+              "cellGap": 2,
+              "color": {
+                "mode": "scheme",
+                "scheme": "RdYlGn",
+                "reverse": true
+              }
+            }
+          },
+          {
+            "id": 5,
+            "title": "Top Drifting Features",
+            "type": "table",
+            "gridPos": {"x": 0, "y": 20, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "topk(10, feature_drift_psi)",
+                "refId": "A",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "transformations": [
+              {
+                "id": "organize",
+                "options": {
+                  "excludeByName": {"Time": true},
+                  "indexByName": {},
+                  "renameByName": {
+                    "feature": "Feature",
+                    "Value": "PSI Score"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Drift Alert Timeline",
+            "type": "state-timeline",
+            "gridPos": {"x": 12, "y": 20, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "feature_drift_psi > 0.3",
+                "legendFormat": "{{feature}}",
+                "refId": "A"
+              }
+            ]
+          }
+        ]
+      }
+    }
+
+  ab-testing.json: |
+    {
+      "dashboard": {
+        "title": "A/B Testing Results",
+        "tags": ["ml", "ab-testing"],
+        "timezone": "browser",
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Traffic Distribution",
+            "type": "piechart",
+            "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "sum(rate(model_predictions_total[5m])) by (model)",
+                "legendFormat": "{{model}}",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "pieType": "pie",
+              "displayLabels": ["name", "percent"],
+              "legend": {
+                "displayMode": "table",
+                "placement": "right",
+                "values": ["value", "percent"]
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "XGBoost vs CatBoost - F1 Score",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 0, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "model_f1_score{model='xgboost'}",
+                "legendFormat": "XGBoost",
+                "refId": "A"
+              },
+              {
+                "expr": "model_f1_score{model='catboost'}",
+                "legendFormat": "CatBoost",
+                "refId": "B"
+              }
+            ],
+            "yaxes": [
+              {"format": "short", "min": 0.8, "max": 1.0},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Latency Comparison",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 8, "w": 24, "h": 8},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, rate(model_latency_seconds_bucket{model='xgboost'}[5m]))",
+                "legendFormat": "XGBoost P50",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(model_latency_seconds_bucket{model='xgboost'}[5m]))",
+                "legendFormat": "XGBoost P95",
+                "refId": "B"
+              },
+              {
+                "expr": "histogram_quantile(0.50, rate(model_latency_seconds_bucket{model='catboost'}[5m]))",
+                "legendFormat": "CatBoost P50",
+                "refId": "C"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(model_latency_seconds_bucket{model='catboost'}[5m]))",
+                "legendFormat": "CatBoost P95",
+                "refId": "D"
+              }
+            ],
+            "yaxes": [
+              {"format": "s"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Model Comparison Table",
+            "type": "table",
+            "gridPos": {"x": 0, "y": 16, "w": 24, "h": 8},
+            "targets": [
+              {
+                "expr": "model_accuracy",
+                "refId": "A",
+                "format": "table",
+                "instant": true
+              },
+              {
+                "expr": "model_f1_score",
+                "refId": "B",
+                "format": "table",
+                "instant": true
+              },
+              {
+                "expr": "model_precision",
+                "refId": "C",
+                "format": "table",
+                "instant": true
+              },
+              {
+                "expr": "model_recall",
+                "refId": "D",
+                "format": "table",
+                "instant": true
+              }
+            ],
+            "transformations": [
+              {
+                "id": "merge"
+              },
+              {
+                "id": "organize",
+                "options": {
+                  "renameByName": {
+                    "model": "Model"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "title": "Statistical Significance",
+            "type": "stat",
+            "gridPos": {"x": 0, "y": 24, "w": 12, "h": 4},
+            "targets": [
+              {
+                "expr": "abs(model_f1_score{model='xgboost'} - model_f1_score{model='catboost'})",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "textMode": "value_and_name",
+              "colorMode": "background",
+              "graphMode": "area",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"value": 0, "color": "red"},
+                  {"value": 0.02, "color": "green"}
+                ]
+              }
+            },
+            "fieldConfig": {
+              "defaults": {
+                "displayName": "F1 Score Difference"
+              }
+            }
+          },
+          {
+            "id": 6,
+            "title": "Winner Determination",
+            "type": "stat",
+            "gridPos": {"x": 12, "y": 24, "w": 12, "h": 4},
+            "targets": [
+              {
+                "expr": "(model_f1_score{model='xgboost'} > model_f1_score{model='catboost'})",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "textMode": "name",
+              "graphMode": "none",
+              "colorMode": "background"
+            },
+            "fieldConfig": {
+              "overrides": [
+                {
+                  "matcher": {"id": "byValue", "options": 1},
+                  "properties": [
+                    {"id": "displayName", "value": "XGBoost Wins"},
+                    {"id": "color", "value": {"mode": "fixed", "fixedColor": "green"}}
+                  ]
+                },
+                {
+                  "matcher": {"id": "byValue", "options": 0},
+                  "properties": [
+                    {"id": "displayName", "value": "CatBoost Wins"},
+                    {"id": "color", "value": {"mode": "fixed", "fixedColor": "blue"}}
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    }
+
+  llm-performance.json: |
+    {
+      "dashboard": {
+        "title": "LLM & RAG Performance",
+        "tags": ["llm", "rag", "gpu"],
+        "timezone": "browser",
+        "refresh": "30s",
+        "panels": [
+          {
+            "id": 1,
+            "title": "Explanations Generated",
+            "type": "stat",
+            "gridPos": {"x": 0, "y": 0, "w": 6, "h": 4},
+            "targets": [
+              {
+                "expr": "sum(increase(llm_requests_total[24h]))",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "graphMode": "area",
+              "colorMode": "value"
+            }
+          },
+          {
+            "id": 2,
+            "title": "Average Generation Time",
+            "type": "stat",
+            "gridPos": {"x": 6, "y": 0, "w": 6, "h": 4},
+            "targets": [
+              {
+                "expr": "rate(llm_request_duration_seconds_sum[5m]) / rate(llm_request_duration_seconds_count[5m])",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "unit": "s",
+              "thresholds": {
+                "steps": [
+                  {"value": 0, "color": "green"},
+                  {"value": 12, "color": "yellow"},
+                  {"value": 20, "color": "red"}
+                ]
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "GPU Utilization",
+            "type": "gauge",
+            "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4},
+            "targets": [
+              {
+                "expr": "nv_gpu_utilization",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "showThresholdLabels": true,
+              "showThresholdMarkers": true,
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {"value": 0, "color": "green"},
+                  {"value": 80, "color": "yellow"},
+                  {"value": 95, "color": "red"}
+                ]
+              }
+            }
+          },
+          {
+            "id": 4,
+            "title": "GPU Memory Usage",
+            "type": "gauge",
+            "gridPos": {"x": 18, "y": 0, "w": 6, "h": 4},
+            "targets": [
+              {
+                "expr": "(nv_gpu_memory_used_bytes / (16 * 1024 * 1024 * 1024)) * 100",
+                "refId": "A"
+              }
+            ],
+            "options": {
+              "unit": "percent",
+              "min": 0,
+              "max": 100,
+              "thresholds": {
+                "steps": [
+                  {"value": 0, "color": "green"},
+                  {"value": 85, "color": "yellow"},
+                  {"value": 95, "color": "red"}
+                ]
+              }
+            }
+          },
+          {
+            "id": 5,
+            "title": "LLM Generation Time Breakdown",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 4, "w": 24, "h": 8},
+            "targets": [
+              {
+                "expr": "rate(embedding_generation_duration_ms_sum[5m]) / rate(embedding_generation_duration_ms_count[5m])",
+                "legendFormat": "Embedding Generation",
+                "refId": "A"
+              },
+              {
+                "expr": "rate(qdrant_search_latency_ms_sum[5m]) / rate(qdrant_search_latency_ms_count[5m])",
+                "legendFormat": "Vector Search",
+                "refId": "B"
+              },
+              {
+                "expr": "rate(llm_request_duration_seconds_sum[5m]) / rate(llm_request_duration_seconds_count[5m]) * 1000",
+                "legendFormat": "Total Generation Time",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {"format": "ms"},
+              {"format": "short"}
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Response Time Distribution",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 12, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, rate(llm_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "P50",
+                "refId": "A"
+              },
+              {
+                "expr": "histogram_quantile(0.95, rate(llm_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "P95",
+                "refId": "B"
+              },
+              {
+                "expr": "histogram_quantile(0.99, rate(llm_request_duration_seconds_bucket[5m]))",
+                "legendFormat": "P99",
+                "refId": "C"
+              }
+            ],
+            "yaxes": [
+              {"format": "s"},
+              {"format": "short"}
+            ],
+            "alert": {
+              "conditions": [
+                {
+                  "evaluator": {"type": "gt", "params": [20]},
+                  "query": {"params": ["B", "15m", "now"]},
+                  "reducer": {"type": "avg"},
+                  "type": "query"
+                }
+              ],
+              "name": "LLM Response Time SLA Violation"
+            }
+          },
+          {
+            "id": 7,
+            "title": "Qdrant Performance",
+            "type": "graph",
+            "gridPos": {"x": 12, "y": 12, "w": 12, "h": 8},
+            "targets": [
+              {
+                "expr": "qdrant_collection_size",
+                "legendFormat": "Vector Count",
+                "refId": "A"
+              },
+              {
+                "expr": "rate(qdrant_search_latency_ms_sum[5m]) / rate(qdrant_search_latency_ms_count[5m])",
+                "legendFormat": "Avg Search Latency (ms)",
+                "refId": "B",
+                "yAxisIndex": 1
+              }
+            ],
+            "yaxes": [
+              {"format": "short", "label": "Vectors"},
+              {"format": "ms", "label": "Latency"}
+            ]
+          },
+          {
+            "id": 8,
+            "title": "Token Generation Rate",
+            "type": "graph",
+            "gridPos": {"x": 0, "y": 20, "w": 24, "h": 8},
+            "targets": [
+              {
+                "expr": "rate(llm_tokens_generated_sum[5m]) / rate(llm_tokens_generated_count[5m])",
+                "legendFormat": "Tokens per Request",
+                "refId": "A"
+              }
+            ],
+            "yaxes": [
+              {"format": "short", "label": "Tokens"},
+              {"format": "short"}
+            ]
+          }
+        ]
+      }
+    }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: monitoring
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: 'Default'
+        orgId: 1
+        folder: ''
+        type: file
+        disableDeletion: false
+        updateIntervalSeconds: 10
+        allowUiUpdates: true
+        options:
+          path: /var/lib/grafana/dashboards

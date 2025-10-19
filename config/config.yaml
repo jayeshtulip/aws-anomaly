@@ -1,0 +1,39 @@
+# Global Configuration
+project:
+  name: "aws-anomaly-detection"
+  version: "0.1.0"
+  description: "AWS CloudWatch Log Anomaly Detection Pipeline"
+
+# Data Configuration
+data:
+  raw_data_path: "data/raw"
+  processed_data_path: "data/processed"
+  train_test_split: 0.8
+  validation_split: 0.1
+  random_seed: 42
+
+# AWS Configuration
+aws:
+  region: ${AWS_REGION}
+  s3_bucket: ${S3_BUCKET_NAME}
+  cloudwatch_log_group: "/aws/lambda/anomaly-detection"
+
+# Feature Engineering
+features:
+  numeric_features:
+    - "response_time"
+    - "error_count"
+    - "request_count"
+  categorical_features:
+    - "service_name"
+    - "log_level"
+  time_features:
+    - "hour_of_day"
+    - "day_of_week"
+
+# Training Configuration
+training:
+  batch_size: 32
+  num_epochs: 100
+  early_stopping_patience: 10
+  checkpoint_dir: "models/checkpoints"

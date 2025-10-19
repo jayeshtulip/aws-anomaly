@@ -1,0 +1,110 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: triton-catboost-variant
+  namespace: triton
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: triton
+      variant: catboost
+  template:
+    metadata:
+      labels:
+        app: triton
+        variant: catboost
+    spec:
+      initContainers:
+      - name: install-catboost
+        image: nvcr.io/nvidia/tritonserver:23.10-py3
+        command:
+        - bash
+        - -c
+        - |
+          echo "Installing compatible CatBoost and NumPy..."
+          pip uninstall -y numpy
+          pip install numpy==1.23.5
+          pip install catboost==1.2
+          echo "Verifying installation..."
+          python3 -c "import numpy; print(f'NumPy: {numpy.__version__}')"
+          python3 -c "import catboost; print(f'CatBoost: {catboost.__version__}')"
+          echo "Success!"
+        volumeMounts:
+        - name: python-libs
+          mountPath: /usr/local/lib/python3.10/dist-packages
+          
+      - name: model-downloader
+        image: amazon/aws-cli:latest
+        command:
+        - sh
+        - -c
+        - |
+          aws s3 sync s3://triton-models-71544/models/catboost_python/ /models/catboost_anomaly/ --region us-east-1
+          ls -R /models/
+        env:
+        - name: AWS_DEFAULT_REGION
+          value: "us-east-1"
+        volumeMounts:
+        - name: models
+          mountPath: /models
+          
+      containers:
+      - name: triton
+        image: nvcr.io/nvidia/tritonserver:23.10-py3
+        command: ["tritonserver"]
+        args:
+        - --model-repository=/models
+        - --log-verbose=1
+        - --strict-model-config=false
+        - --exit-on-error=false
+        ports:
+        - containerPort: 8000
+        - containerPort: 8001
+        - containerPort: 8002
+        volumeMounts:
+        - name: models
+          mountPath: /models
+        - name: python-libs
+          mountPath: /usr/local/lib/python3.10/dist-packages
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "1"
+        livenessProbe:
+          httpGet:
+            path: /v2/health/live
+            port: 8000
+          initialDelaySeconds: 180
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /v2/health/ready
+            port: 8000
+          initialDelaySeconds: 180
+          periodSeconds: 10
+      volumes:
+      - name: models
+        emptyDir: {}
+      - name: python-libs
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: triton-catboost-variant
+  namespace: triton
+spec:
+  selector:
+    app: triton
+    variant: catboost
+  ports:
+  - name: http
+    port: 8000
+  - name: grpc
+    port: 8001
+  - name: metrics
+    port: 8002

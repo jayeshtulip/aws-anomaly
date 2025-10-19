@@ -1,0 +1,6 @@
+artifact_location: file:///C:/Users/jayes/OneDrive/Desktop/jathakam/ai/k8s-deployent/aws-anomaly-detection/mlruns/494233800771245085
+creation_time: 1760616762742
+experiment_id: '494233800771245085'
+last_update_time: 1760616762742
+lifecycle_stage: active
+name: isolation-forest-training

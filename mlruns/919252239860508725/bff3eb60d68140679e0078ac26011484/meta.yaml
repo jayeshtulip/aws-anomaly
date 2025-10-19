@@ -1,0 +1,15 @@
+artifact_uri: file:///C:/Users/jayes/OneDrive/Desktop/jathakam/ai/k8s-deployent/aws-anomaly-detection/mlruns/919252239860508725/bff3eb60d68140679e0078ac26011484/artifacts
+end_time: 1760616770809
+entry_point_name: ''
+experiment_id: '919252239860508725'
+lifecycle_stage: active
+run_id: bff3eb60d68140679e0078ac26011484
+run_name: xgboost
+run_uuid: bff3eb60d68140679e0078ac26011484
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1760616768516
+status: 3
+tags: []
+user_id: greeshma

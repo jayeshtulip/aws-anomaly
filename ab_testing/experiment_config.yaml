@@ -1,0 +1,76 @@
+experiments:
+  # Test A: XGBoost vs CatBoost
+  model_comparison:
+    name: "XGBoost vs CatBoost"
+    description: "Compare XGBoost and CatBoost performance"
+    type: "model_variant"
+    variants:
+      - id: "xgboost_v1"
+        name: "XGBoost Baseline"
+        model_path: "models/xgboost/model.pkl"
+        scaler_path: "models/xgboost/scaler.pkl"
+        weight: 0.5
+        
+      - id: "catboost_v1"
+        name: "CatBoost Baseline"
+        model_path: "models/catboost/model.pkl"
+        scaler_path: "models/catboost/scaler.pkl"
+        weight: 0.5
+    
+    metrics:
+      - name: "latency_p99"
+        threshold: 100  # ms
+      - name: "accuracy"
+        threshold: 0.95
+      - name: "f1_score"
+        threshold: 0.90
+    
+    duration_days: 7
+    min_samples: 1000
+    
+  # Test B: XGBoost Hyperparameter Tuning
+  xgboost_hyperparams:
+    name: "XGBoost Hyperparameter Optimization"
+    description: "Test different XGBoost configurations"
+    type: "hyperparameter"
+    variants:
+      - id: "xgb_v1"
+        name: "Shallow & Fast"
+        params:
+          max_depth: 6
+          learning_rate: 0.1
+          n_estimators: 500
+        weight: 0.33
+        
+      - id: "xgb_v2"
+        name: "Deep & Slow"
+        params:
+          max_depth: 10
+          learning_rate: 0.05
+          n_estimators: 1000
+        weight: 0.33
+        
+      - id: "xgb_v3"
+        name: "Shallow & Aggressive"
+        params:
+          max_depth: 4
+          learning_rate: 0.2
+          n_estimators: 300
+        weight: 0.34
+    
+    metrics:
+      - name: "auc_roc"
+        threshold: 0.95
+      - name: "inference_time"
+        threshold: 50  # ms
+    
+    duration_days: 7
+    min_samples: 1000
+
+# Global settings
+settings:
+  random_seed: 42
+  significance_level: 0.05
+  min_effect_size: 0.02
+  traffic_ramp_up: true
+  rollback_on_error: true
